@@ -58,7 +58,7 @@ twi_status_t twi_init(const uint32_t scl_frequency)
     }
 
     twi_isr.idle = true;
-    twi_isr.status = SUCCESS;
+    // twi_isr.status = SUCCESS; //Status should NOT be initalized to success
 
     TWCR |= (1 << TWEN) | (1 << TWIE) | (1 << TWEA);
 
