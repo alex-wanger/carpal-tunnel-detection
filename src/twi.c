@@ -4,7 +4,7 @@
 
 void twi_init(void) {
     TWSR = 0x00;
-    TWBR = ((F_CPU / 100000UL) - 16) / 2;  // SCL = 100kHz
+    TWBR = ((F_CPU / 100000UL) - 16) / 2;  // SCL = 100 kHz
 }
 
 void twi_start(void) {
@@ -55,4 +55,3 @@ void twi_readRegs(uint8_t slave_addr, uint8_t reg, uint8_t *buf, uint8_t len) {
     buf[len-1] = twi_readNack();
     twi_stop();
 }
-

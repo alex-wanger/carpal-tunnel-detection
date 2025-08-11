@@ -4,7 +4,7 @@
 #include <stdlib.h> // for dtostrf
 
 void usart_init(uint32_t baud) {
-    // enable double speed for tighter baud error
+    // enable double speed
     UCSR0A |= (1<<U2X0);
     uint16_t ubrr = F_CPU/8/baud - 1;
     UBRR0H = (ubrr >> 8);
@@ -29,6 +29,3 @@ void usart_print_float(float f, uint8_t decimals) {
     dtostrf(f, decimals+3, decimals, buf);
     usart_print(buf);
 }
-
-
-
