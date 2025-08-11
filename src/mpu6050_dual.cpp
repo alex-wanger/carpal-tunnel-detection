@@ -57,13 +57,13 @@ void mpu6050_dual_init(void) {
     writeRegAck(MPU6050_ADDR2, REG_GYRO_CONFIG, 0x00);
     _delay_ms(50);
 
-    // sample rate 200 Hz
-    writeRegAck(MPU6050_ADDR1, REG_SMPLRT_DIV, 4);
-    writeRegAck(MPU6050_ADDR2, REG_SMPLRT_DIV, 4);
+    // sample rate 50Hz
+    writeRegAck(MPU6050_ADDR1, REG_SMPLRT_DIV, 19);
+    writeRegAck(MPU6050_ADDR2, REG_SMPLRT_DIV, 19);
 
-    // DLPF = 44 Hz
-    writeRegAck(MPU6050_ADDR1, REG_CONFIG, 3);
-    writeRegAck(MPU6050_ADDR2, REG_CONFIG, 3);
+    // DLPF = 5Hz
+    writeRegAck(MPU6050_ADDR1, REG_CONFIG, 6);
+    writeRegAck(MPU6050_ADDR2, REG_CONFIG, 6);
     _delay_ms(50);
 }
 
