@@ -19,7 +19,6 @@ ISR(TIMER0_OVF_vect)
 }
 void timer0_init()
 {
-    // Prescaler = 64, normal mode
     TCCR0A = 0;
     TCCR0B = (1 << CS01) | (1 << CS00); // prescale by 64
 

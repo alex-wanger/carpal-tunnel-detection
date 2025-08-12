@@ -1,4 +1,4 @@
-#include "usart.h"
+#include "../include/usart.h"
 #include <avr/io.h>
 #include <util/delay.h>
 #include <stdlib.h> // for dtostrf

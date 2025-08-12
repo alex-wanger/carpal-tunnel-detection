@@ -1,30 +1,27 @@
-MCU        = atmega328p
-F_CPU      = 16000000UL
-BAUD       = 115200
-PORT       = /dev/ttyUSB0
-PROGRAMMER = arduino
+CC      = avr-gcc
+CFLAGS += \
+    -DF_CPU=16000000ULL \
+    -O0 \
+    -Wall \
+    -Wextra \
+    -Wpedantic \
+    -g \
+    -mmcu=atmega328p \
+    -std=gnu17 \
 
-CFLAGS = -Iinclude -Idriver -std=gnu11 -Wall -Os -mmcu=$(MCU) -DF_CPU=$(F_CPU)
-
-# 自动收集 driver/ 里的所有 .c 文件
-SRCS := $(wildcard driver/*.c)
-OBJS := $(SRCS:.c=.o)
-
+.PHONY: all
 all: main.elf
 
-main.elf: $(OBJS)
-	avr-gcc $(CFLAGS) $(OBJS) -o $@
-
-driver/%.o: driver/%.c
-	avr-gcc $(CFLAGS) -c $< -o $@
-
+.PHONY: clean
 clean:
-	rm -f $(OBJS) main.elf main.hex
+	@rm -rvf *.d *.elf *.o
 
-upload: main.hex
-	avrdude -F -V -c $(PROGRAMMER) -p $(MCU) -P $(PORT) -b $(BAUD) -U flash:w:main.hex
+main.elf: main.o
+	$(CC) $(CFLAGS) -o $@ $^
 
-main.hex: main.elf
-	avr-objcopy -O ihex -R .eeprom main.elf main.hex
+%.o: %.c
+	$(CC) $(CFLAGS) -MM -MF $*.d $<
+	$(CC) $(CFLAGS) -c $<
 
-.PHONY: all clean upload
+-include $(wildcard *.d)
+
