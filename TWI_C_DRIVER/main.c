@@ -55,56 +55,6 @@ void clear_fifo(void)
         ;
 }
 
-// Function to dump important MPU-6050 registers
-void dump_accel_registers(void)
-{
-    // Accelerometer data registers
-    struct
-    {
-        uint8_t addr;
-        const char *name;
-    } accel_regs[] = {
-        {0x3B, "ACCEL_XOUT_H"},
-        {0x3C, "ACCEL_XOUT_L"},
-        {0x3D, "ACCEL_YOUT_H"},
-        {0x3E, "ACCEL_YOUT_L"},
-        {0x3F, "ACCEL_ZOUT_H"},
-        {0x40, "ACCEL_ZOUT_L"}};
-
-    static uint8_t accel_addresses[6];
-    static uint8_t accel_values[6];
-    static const char *accel_names[6];
-    static int16_t accel_combined[3]; // Combined 16-bit values
-    static float accel_g_values[3];   // Converted to g-force
-
-    for (int i = 0; i < 6; i++)
-    {
-        accel_addresses[i] = accel_regs[i].addr;
-        accel_values[i] = read_register(accel_regs[i].addr);
-        accel_names[i] = accel_regs[i].name;
-
-        // SET BREAKPOINT HERE to examine each raw register
-        // In GDB: (gdb) print accel_names[i]
-        //         (gdb) print/x accel_addresses[i]
-        //         (gdb) print/x accel_values[i]
-    }
-
-    // Combine high and low bytes to form 16-bit values
-    accel_combined[0] = (accel_values[0] << 8) | accel_values[1]; // ACCEL_X
-    accel_combined[1] = (accel_values[2] << 8) | accel_values[3]; // ACCEL_Y
-    accel_combined[2] = (accel_values[4] << 8) | accel_values[5]; // ACCEL_Z
-
-    // Convert to g-force
-    accel_g_values[0] = accel_combined[0] / ACCEL_CONSTANT; // X in g
-    accel_g_values[1] = accel_combined[1] / ACCEL_CONSTANT; // Y in g
-    accel_g_values[2] = accel_combined[2] / ACCEL_CONSTANT; // Z in g
-
-    volatile int accel_dump_complete = 1; // SET BREAKPOINT HERE
-    // In GDB: (gdb) print accel_combined[0]@3     # All raw 16-bit values
-    //         (gdb) print accel_g_values[0]@3     # All g-force values
-    //         (gdb) print/x accel_values[0]@6     # All raw register bytes
-}
-
 uint16_t calculate_fifo_bytes(void)
 {
     static uint8_t fifo_count_buffer[2];
@@ -137,8 +87,6 @@ int main(void)
 
     while (status != SUCCESS)
         ;
-
-    dump_accel_registers();
 
     twi_message_t CONFIG[7] = {
         {
@@ -189,21 +137,21 @@ int main(void)
     while (!twi_isr.idle)
         ;
 
-    static uint8_t fifo_data_buffer[120];
+    static uint8_t fifo_data_buffer[60];
 
     while (1)
     {
         clear_fifo();
         uint32_t current_time = millis();
 
-        if (current_time - initial_time >= 500)
+        if (current_time - initial_time >= 250)
         {
             uint16_t fifo_count = calculate_fifo_bytes();
             initial_time = current_time;
 
             uint16_t samples = fifo_count / 12;
-            if (samples > 10)
-                samples = 10;
+            if (samples > 5)
+                samples = 5;
             uint16_t bytes_to_read = samples * 12;
 
             if (samples > 0)
