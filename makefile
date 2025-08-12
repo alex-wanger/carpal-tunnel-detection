@@ -1,64 +1,63 @@
-# 工程名称和器件配置
-TARGET     = main
-MCU        = atmega328p
-F_CPU      = 16000000UL
-BAUD       = 115200
+# ========= Project Config =========
+MCU     := atmega328p
+F_CPU   := 16000000UL
+TARGET  := main
 
-# 工具链
-CC         = avr-gcc
-OBJCOPY    = avr-objcopy
-PROGRAMMER = arduino
-UPLOAD_PORT= /dev/ttyACM0    # 根据实际情况改为 ttyUSB0、COMx 等
+# 串口与烧录设置（按需修改）
+PORT    := /dev/ttyACM0
+BAUD    := 115200
+PROGRAMMER := arduino
+AVRDUDE_MCU := m328p
 
-# 编译选项
-CFLAGS   = -Iinclude -std=gnu11 -Wall -Os -mmcu=$(MCU) -DF_CPU=$(F_CPU)
-CPPFLAGS = -Iinclude -std=gnu++17 -Wall -Os -mmcu=$(MCU) -DF_CPU=$(F_CPU)
-LDFLAGS  = -mmcu=$(MCU)
+# 头文件路径
+INCLUDES := -Iinclude -Isrc
 
-# 源文件列表
-SRC_C    = src/twi.c \
-           src/usart.c \
-           src/biquad.c
+# ========= Toolchain =========
+CC      := avr-gcc
+CXX     := avr-g++
+OBJCOPY := avr-objcopy
+SIZE    := avr-size
+AVRDUDE := avrdude
 
-SRC_CPP  = src/mpu6050_dual.cpp \
-           src/main.cpp
+# 编译参数
+CFLAGS   := $(INCLUDES) -std=gnu11 -Wall -Os -mmcu=$(MCU) -DF_CPU=$(F_CPU)
+CXXFLAGS := $(INCLUDES) -std=gnu++17 -Wall -Os -mmcu=$(MCU) -DF_CPU=$(F_CPU) -fno-exceptions -fno-rtti
+LDFLAGS  := -mmcu=$(MCU)
 
-# 目标文件
-OBJ_C    = $(SRC_C:.c=.o)
-OBJ_CPP  = $(SRC_CPP:.cpp=.o)
+# ========= Sources / Objects (auto) =========
+CSRC    := $(wildcard src/*.c)
+CXXSRC  := $(wildcard src/*.cpp)
+OBJS    := $(CSRC:.c=.o) $(CXXSRC:.cpp=.o)
 
-.PHONY: all clean upload
-
-# 1) 默认：编译并生成 HEX
+# ========= Default target =========
 all: $(TARGET).hex
 
-# 2) C 文件编译
-%.o: %.c
+# 生成 ELF
+$(TARGET).elf: $(OBJS)
+	$(CC) $(LDFLAGS) $(OBJS) -o $@
+	$(SIZE) --mcu=$(MCU) --format=avr $@
+
+# C 源文件编译
+src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# 3) C++ 文件编译
-%.o: %.cpp
-	$(CC) $(CPPFLAGS) -c $< -o $@
+# C++ 源文件编译
+src/%.o: src/%.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# 4) 链接 ELF
-$(TARGET).elf: $(OBJ_C) $(OBJ_CPP)
-	$(CC) $(LDFLAGS) $^ -o $@
-
-# 5) 生成 Intel HEX
+# 生成 HEX
 $(TARGET).hex: $(TARGET).elf
 	$(OBJCOPY) -O ihex -R .eeprom $< $@
 
-# 6) 烧录：将 HEX 写入 AVR
+# ========= Flash (upload) =========
 upload: $(TARGET).hex
-	@echo "Uploading $(TARGET).hex to $(UPLOAD_PORT)..."
-	avrdude -v \
-		-p$(MCU) \
-		-c$(PROGRAMMER) \
-		-P$(UPLOAD_PORT) \
-		-b$(BAUD) \
-		-D \
-		-Uflash:w:$(TARGET).hex:i
+	$(AVRDUDE) -c $(PROGRAMMER) -P $(PORT) -p $(AVRDUDE_MCU) -b $(BAUD) -U flash:w:$<
 
-# 7) 清理构建文件
+# ========= Clean =========
 clean:
-	rm -f $(OBJ_C) $(OBJ_CPP) $(TARGET).elf $(TARGET).hex
+	rm -f src/*.o $(TARGET).elf $(TARGET).hex
+
+# 便捷别名
+make: all
+
+.PHONY: all upload clean make
