@@ -7,6 +7,7 @@
 
 uint8_t const MPU_ADDRESS = 0x68;
 float const ACCEL_CONSTANT = 16384.0;
+float const GYRO_CONSTANT = 131.0;
 
 // Function to read a single register
 uint8_t read_register(uint8_t reg_addr)
@@ -180,9 +181,17 @@ int main(void)
                     int16_t accel_y_raw = (sample[2] << 8) | sample[3]; // Bytes 2-3
                     int16_t accel_z_raw = (sample[4] << 8) | sample[5]; // Bytes 4-5
 
+                    int16_t gyro_x_raw = (sample[6] << 8) | sample[7];   // Bytes 6-7
+                    int16_t gyro_y_raw = (sample[8] << 8) | sample[9];   // Bytes 8-9
+                    int16_t gyro_z_raw = (sample[10] << 8) | sample[11]; // Bytes 10-11
+
                     volatile float accel_x_g = accel_x_raw / ACCEL_CONSTANT;
                     volatile float accel_y_g = accel_y_raw / ACCEL_CONSTANT;
                     volatile float accel_z_g = accel_z_raw / ACCEL_CONSTANT;
+
+                    volatile float gyro_x_dps = gyro_x_raw / GYRO_CONSTANT;
+                    volatile float gyro_y_dps = gyro_y_raw / GYRO_CONSTANT;
+                    volatile float gyro_z_dps = gyro_z_raw / GYRO_CONSTANT;
 
                     // SET BREAKPOINT HERE to verify the values
                     volatile int YES = 1;
