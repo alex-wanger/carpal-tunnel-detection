@@ -109,6 +109,14 @@ twi_status_t twi_status(void)
     return status;
 }
 
+static void return_isr(const twi_status_t status)
+{
+    twi_isr = (twi_isr_t){
+        .idle = true,
+        .status = status,
+    };
+}
+
 static void clear_twsto(void)
 {
     // If a user enqueues a new set of messages while the STOP
@@ -125,28 +133,44 @@ static void clear_twsto(void)
 
 ISR(TWI_vect)
 {
-    if ((TWCR & (1 << TWWC)))
+    static unsigned char *buffer;
+    static size_t size;
+
+    twi_status_t status = FAILURE;
+
+    if (TWCR & (1 << TWWC))
     {
-        twi_isr.status = OVERWRITE_FAILURE;
-        twi_isr.idle = true;
-        TWCR = TWCR | (1 << TWINT);
-        return;
+        status = OVERWRITE_FAILURE;
+        goto error;
     }
 
-    twi_message_t *message = &twi_isr.messages[0];
-    uint8_t *buffer = message->buffer;
+    twi_message_t *const message = twi_isr.messages;
 
     switch (TW_STATUS)
     {
     case TW_START:
     case TW_REP_START:
         TWDR = message->address;
-        TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT);
+
+        buffer = message->buffer;
+        size = message->size;
+
+        uint8_t twcr = TWCR & ~(1 << TWSTA);
+
+        const bool mr_mode = message->address & 1;
+
+        if (mr_mode)
+            twcr |= 1 << TWEA;
+
+        twcr |= (1 << TWINT);
+
+        TWCR = twcr;
+
         return;
 
     case TW_MT_SLA_ACK:  // SLA+W transmitted, ACK received
     case TW_MT_DATA_ACK: // Data byte transmitted, ACK received
-        if (message->size == 0)
+        if (size == 0)
         {
             twi_isr.message_count--;
             if (twi_isr.message_count > 0)
@@ -157,9 +181,8 @@ ISR(TWI_vect)
             else
             {
                 TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTO); // STOP
-                twi_isr.status = SUCCESS;
-                twi_isr.idle = true;
                 clear_twsto();
+                return_isr(SUCCESS);
             }
             return;
         }
@@ -167,12 +190,12 @@ ISR(TWI_vect)
         // Send next data byte
         TWDR = *(buffer);
         buffer++;
-        message->size--;
+        size--;
         TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT); // Prepare for next byte
         return;
 
     case TW_MR_SLA_ACK: // SLA+R transmitted, ACK received
-        if (message->size > 1)
+        if (size > 1)
         {
             TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWEA); // ACK next byte
         }
@@ -184,15 +207,15 @@ ISR(TWI_vect)
     case TW_MR_DATA_ACK: // Data byte received, ACK transmitted
 
         *(buffer) = TWDR;
-        message->buffer++;
-        message->size--;
+        buffer++;
+        size--;
 
-        if (message->size > 1)
+        if (size > 1)
         {
             TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWEA); // ACK next byte
         }
 
-        else if (message->size == 1)
+        else if (size == 1)
         {
             TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT); // NACK last byte
         }
@@ -212,7 +235,7 @@ ISR(TWI_vect)
                 TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTO); // STOP
                 clear_twsto();
                 twi_isr.status = SUCCESS;
-                twi_isr.idle = true;
+                return_isr(SUCCESS);
             }
         }
         return;
@@ -220,7 +243,7 @@ ISR(TWI_vect)
     case TW_MR_DATA_NACK: // Data byte received, NACK transmitted
         *(buffer) = TWDR; // Store the last received byte
         buffer++;
-        message->size--;
+        size--;
 
         twi_isr.message_count--;
         if (twi_isr.message_count > 0)
@@ -232,9 +255,8 @@ ISR(TWI_vect)
         {
             // All messages complete
             TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTO); // STOP
-            twi_isr.status = SUCCESS;
-            twi_isr.idle = true;
             clear_twsto();
+            return_isr(SUCCESS);
         }
         return;
 
@@ -249,7 +271,12 @@ ISR(TWI_vect)
     default:
         TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTO);
         twi_isr.idle = true;
-        return;
         clear_twsto();
+        return;
     }
+error:
+    return_isr(status);
+    TWCR |= 1 << TWSTO;
+    TWCR |= 1 << TWINT; // Clear interrupt flag to exit ISR
+    clear_twsto();
 }
