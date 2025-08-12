@@ -17,7 +17,6 @@ ISR(TIMER0_OVF_vect)
         timer0_millis += 1;
     }
 }
-
 void timer0_init()
 {
     // Prescaler = 64, normal mode
@@ -28,7 +27,6 @@ void timer0_init()
 
     sei(); // Enable global interrupts
 }
-
 uint32_t millis()
 {
     timer0_init();

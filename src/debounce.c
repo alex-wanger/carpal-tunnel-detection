@@ -1,9 +1,9 @@
 #include "debounce.h"
 #include <avr/io.h>
-
+#include "twi.h"
 #include "debounce.h"
-#include "millis.h"
 #include <avr/io.h>
+#include "timer.h"
 
 
 #define BUTTON_PIN   PIND

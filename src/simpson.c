@@ -1,7 +1,8 @@
 #include "simpson.h"
 #include <stdlib.h>
 #include "simpson.h"
-#include "millis.h"
+#include "twi.h"
+#include "timer.h"
 
 
 static uint8_t grow_if_needed(simpson_store_t *s, uint16_t need_samples)
