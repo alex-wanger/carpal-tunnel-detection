@@ -60,7 +60,7 @@ twi_status_t twi_init(const uint32_t scl_frequency)
     twi_isr.idle = true;
     twi_isr.status = SUCCESS;
 
-    TWCR |= (1 << TWEN) | (1 << TWIE) | (1 << TWEA);
+    TWCR |= (1 << TWEN) | (1 << TWIE) | (1 << TWEA) | (1 << TWINT);
 
     return SUCCESS;
 }

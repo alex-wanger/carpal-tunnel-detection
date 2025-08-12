@@ -10,29 +10,6 @@
 #include "../include/simpson.h"
 #include "cal.c"
 
-// Function to read a single register
-uint8_t read_register(uint8_t reg_addr)
-{
-    static uint8_t reg_value;
-    twi_message_t reg_read[2] = {
-        {
-            .address = TWI_WRITE_ADDRESS(MPU_ADDRESS),
-            .buffer = &reg_addr,
-            .size = 1,
-        },
-        {
-            .address = TWI_READ_ADDRESS(MPU_ADDRESS),
-            .buffer = &reg_value,
-            .size = 1,
-        }};
-
-    twi_enqueue(reg_read, 2);
-    while (!twi_isr.idle)
-        ;
-
-    return reg_value;
-}
-
 void clear_fifo(void)
 {
     twi_message_t CLEAR_FIFO[3] = {
@@ -83,7 +60,7 @@ uint16_t calculate_fifo_bytes(void)
 int main(void)
 {
     sei();
-    twi_status_t status = twi_init(100000);
+    twi_init(100000);
 
     uint32_t initial_time = millis();
     uint32_t last_integration_time = initial_time;
@@ -97,9 +74,8 @@ int main(void)
 
     while (1)
     {
-        clear_fifo();
         uint32_t current_time = millis();
-
+        // clear_fifo();
         if (current_time - initial_time >= 250)
         {
             uint16_t fifo_count = calculate_fifo_bytes();
@@ -132,41 +108,41 @@ int main(void)
                 {
                     uint8_t *sample = &fifo_data_buffer[i * 12];
 
-                    // int16_t accel_x_raw = (sample[0] << 8) | sample[1]; // Bytes 0-1
-                    // int16_t accel_y_raw = (sample[2] << 8) | sample[3]; // Bytes 2-3
-                    // int16_t accel_z_raw = (sample[4] << 8) | sample[5]; // Bytes 4-5
+                    int16_t accel_x_raw = (sample[0] << 8) | sample[1]; // Bytes 0-1
+                    int16_t accel_y_raw = (sample[2] << 8) | sample[3]; // Bytes 2-3
+                    int16_t accel_z_raw = (sample[4] << 8) | sample[5]; // Bytes 4-5
 
-                    int16_t gyro_x_raw = (sample[6] << 8) | sample[7];   // Bytes 6-7
-                    int16_t gyro_y_raw = (sample[8] << 8) | sample[9];   // Bytes 8-9
-                    int16_t gyro_z_raw = (sample[10] << 8) | sample[11]; // Bytes 10-11
+                    // int16_t gyro_x_raw = (sample[6] << 8) | sample[7];   // Bytes 6-7
+                    // int16_t gyro_y_raw = (sample[8] << 8) | sample[9];   // Bytes 8-9
+                    // int16_t gyro_z_raw = (sample[10] << 8) | sample[11]; // Bytes 10-11
 
-                    // volatile float accel_x_g = accel_x_raw / ACCEL_CONSTANT;
-                    // volatile float accel_y_g = accel_y_raw / ACCEL_CONSTANT;
-                    // volatile float accel_z_g = accel_z_raw / ACCEL_CONSTANT;
+                    volatile float accel_x_g = accel_x_raw / ACCEL_CONSTANT;
+                    volatile float accel_y_g = accel_y_raw / ACCEL_CONSTANT;
+                    volatile float accel_z_g = accel_z_raw / ACCEL_CONSTANT;
 
-                    volatile float gyro_x_dps = gyro_x_raw / GYRO_CONSTANT;
-                    volatile float gyro_y_dps = gyro_y_raw / GYRO_CONSTANT;
-                    volatile float gyro_z_dps = gyro_z_raw / GYRO_CONSTANT;
+                    // volatile float gyro_x_dps = gyro_x_raw / GYRO_CONSTANT;
+                    // volatile float gyro_y_dps = gyro_y_raw / GYRO_CONSTANT;
+                    // volatile float gyro_z_dps = gyro_z_raw / GYRO_CONSTANT;
 
                     // SET BREAKPOINT HERE to verify the values
                     volatile int YES = 1;
-                    simpson_append(&simps, gyro_x_dps, gyro_y_dps, gyro_z_dps);
+                    // simpson_append(&simps, gyro_x_dps, gyro_y_dps, gyro_z_dps);
                 }
 
-                if (simpson_size(&simps) >= 2)
-                {
-                    float dt_per_sample = (float)(current_time - last_integration_time) / 1000.0f;
-                    if (samples > 0)
-                        dt_per_sample /= (float)samples;
-                    if (dt_per_sample <= 0.0f)
-                        dt_per_sample = 0.01f;
+                // if (simpson_size(&simps) >= 2)
+                // {
+                //     float dt_per_sample = (float)(current_time - last_integration_time) / 1000.0f;
+                //     if (samples > 0)
+                //         dt_per_sample /= (float)samples;
+                //     if (dt_per_sample <= 0.0f)
+                //         dt_per_sample = 0.01f;
 
-                    float angle_x_deg = simpson_angle_x(&simps, dt_per_sample);
-                    float angle_y_deg = simpson_angle_y(&simps, dt_per_sample);
-                    float angle_z_deg = simpson_angle_z(&simps, dt_per_sample);
+                //     float angle_x_deg = simpson_angle_x(&simps, dt_per_sample);
+                //     float angle_y_deg = simpson_angle_y(&simps, dt_per_sample);
+                //     float angle_z_deg = simpson_angle_z(&simps, dt_per_sample);
 
-                    last_integration_time = current_time;
-                }
+                //     last_integration_time = current_time;
+                // }
             }
         }
     }
