@@ -1,8 +1,8 @@
 #include "led.h"
 
-#define LED_X PD4
-#define LED_Y PD5
-#define LED_Z PD6
+#define LED_X PD3
+#define LED_Y PD4
+#define LED_Z PD5
 
 void led_init(void) {
     DDRD |= (1 << LED_X) | (1 << LED_Y) | (1 << LED_Z);
