@@ -6,10 +6,12 @@ static uint8_t grow_if_needed(simpson_store_t *s, uint16_t need_samples)
     if (s->capacity >= need_samples)
         return 1;
 
-    uint16_t newcap = s->capacity ? (uint16_t)(s->capacity * 2u) : (uint16_t)SIMPSON_START_CAP;
+    const uint16_t GROW_STEP = 50; 
+
+    uint16_t newcap = s->capacity ? s->capacity : (uint16_t)SIMPSON_START_CAP;
     while (newcap < need_samples) {
         uint16_t prev = newcap;
-        newcap = (uint16_t)(newcap * 2u);
+        newcap = (uint16_t)(newcap + GROW_STEP);
         if (newcap <= prev) {
             newcap = need_samples;
             break;
