@@ -78,8 +78,15 @@ int main(void)
         // clear_fifo();
         if (current_time - initial_time >= 250)
         {
-            uint16_t fifo_count = calculate_fifo_bytes();
+
+            int16_t fifo_count = calculate_fifo_bytes();
             initial_time = current_time;
+
+            if (fifo_count >= 1000)
+            {
+                clear_fifo();
+                continue;
+            }
 
             uint16_t samples = fifo_count / 12;
             if (samples > 5)
@@ -120,6 +127,7 @@ int main(void)
                     volatile float accel_y_g = accel_y_raw / ACCEL_CONSTANT;
                     volatile float accel_z_g = accel_z_raw / ACCEL_CONSTANT;
 
+                    float accel[3] = {accel_x_g, accel_y_g, accel_z_g};
                     // volatile float gyro_x_dps = gyro_x_raw / GYRO_CONSTANT;
                     // volatile float gyro_y_dps = gyro_y_raw / GYRO_CONSTANT;
                     // volatile float gyro_z_dps = gyro_z_raw / GYRO_CONSTANT;

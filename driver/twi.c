@@ -60,7 +60,7 @@ twi_status_t twi_init(const uint32_t scl_frequency)
     twi_isr.idle = true;
     twi_isr.status = SUCCESS;
 
-    TWCR |= (1 << TWEN) | (1 << TWIE) | (1 << TWEA) | (1 << TWINT);
+    TWCR |= (1 << TWEN) | (1 << TWIE) | (1 << TWEA);
 
     return SUCCESS;
 }
@@ -168,30 +168,26 @@ ISR(TWI_vect)
 
         return;
 
-    case TW_MT_SLA_ACK:  // SLA+W transmitted, ACK received
-    case TW_MT_DATA_ACK: // Data byte transmitted, ACK received
-        if (size == 0)
-        {
+    case TW_MT_SLA_ACK: // SLA+W transmitted, ACK received
+    case TW_MT_DATA_ACK:
+        if (!size--)
+        { // FIXED: Decrement size AND check if was 0
             twi_isr.message_count--;
             if (twi_isr.message_count > 0)
             {
                 twi_isr.messages++;
-                TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTA); // repeated START
+                TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTA);
             }
             else
             {
-                TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTO); // STOP
+                TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTO);
                 clear_twsto();
                 return_isr(SUCCESS);
             }
             return;
         }
-
-        // Send next data byte
-        TWDR = *(buffer);
-        buffer++;
-        size--;
-        TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT); // Prepare for next byte
+        TWDR = *(buffer++); // FIXED: Atomic get byte and increment pointer
+        TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT);
         return;
 
     case TW_MR_SLA_ACK: // SLA+R transmitted, ACK received
@@ -204,45 +200,37 @@ ISR(TWI_vect)
             TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT); // NACK last byte
         }
         return;
-    case TW_MR_DATA_ACK: // Data byte received, ACK transmitted
-
-        *(buffer) = TWDR;
-        buffer++;
+    case TW_MR_DATA_ACK:
+        *(buffer++) = TWDR;
         size--;
 
         if (size > 1)
         {
-            TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWEA); // ACK next byte
+            TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWEA);
         }
-
         else if (size == 1)
         {
-            TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT); // NACK last byte
+            TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT);
         }
-
         else
         {
-            // Current message complete
             twi_isr.message_count--;
             if (twi_isr.message_count > 0)
             {
-                twi_isr.messages++;                                             // move to next message
-                TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTA); // repeated START
+                twi_isr.messages++;
+                TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTA);
             }
             else
             {
-                // All messages complete
-                TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTO); // STOP
+                TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTO);
                 clear_twsto();
-                twi_isr.status = SUCCESS;
                 return_isr(SUCCESS);
             }
         }
         return;
 
-    case TW_MR_DATA_NACK: // Data byte received, NACK transmitted
-        *(buffer) = TWDR; // Store the last received byte
-        buffer++;
+    case TW_MR_DATA_NACK:   // Data byte received, NACK transmitted
+        *(buffer++) = TWDR; // Store the last received byte
         size--;
 
         twi_isr.message_count--;
@@ -271,6 +259,7 @@ ISR(TWI_vect)
     default:
         TWCR = (1 << TWEN) | (1 << TWIE) | (1 << TWINT) | (1 << TWSTO);
         twi_isr.idle = true;
+        return_isr(FAILURE);
         clear_twsto();
         return;
     }
