@@ -1,16 +1,19 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <stdint.h>
-#include "../include/twi.h"
-#include "../include/config.h"
-#include "timer.c"
-#include "usart.c"
-#include "twi.c"
-#include "simpson.c"
-#include "../include/simpson.h"
-#include "cal.c"
+#include <stdbool.h>
 
-void clear_fifo(void)
+#include "twi.c"
+#include "../include/twi.h"
+#include "timer.c"
+#include "../include/config.h"
+
+#include "../include/simpson.h"
+#include "simpson.c"
+#include "cal.c"
+#include "../include/cal.h"
+
+void clear_fifo(uint8_t MPU_ADDRESS)
 {
     twi_message_t CLEAR_FIFO[3] = {
         {
@@ -27,14 +30,15 @@ void clear_fifo(void)
             .address = TWI_WRITE_ADDRESS(MPU_ADDRESS),
             .buffer = (uint8_t[]){0x23, 0b01111000},
             .size = 2,
-        }};
+        },
+    };
 
     twi_enqueue(CLEAR_FIFO, 3);
     while (!twi_isr.idle)
         ;
 }
 
-uint16_t calculate_fifo_bytes(void)
+uint16_t calculate_fifo_bytes(uint8_t MPU_ADDRESS)
 {
     static uint8_t fifo_count_buffer[2];
     twi_message_t fifo_count_read[2] = {
@@ -48,7 +52,6 @@ uint16_t calculate_fifo_bytes(void)
             .buffer = fifo_count_buffer,
             .size = 2,
         }};
-
     twi_enqueue(fifo_count_read, 2);
     while (!twi_isr.idle)
         ;
@@ -59,101 +62,94 @@ uint16_t calculate_fifo_bytes(void)
 
 int main(void)
 {
+    float HIGH_ACCEL[3];
+    float LOW_ACCEL[3];
+
     sei();
-    twi_init(100000);
+    twi_status_t status = twi_init(100000);
 
     uint32_t initial_time = millis();
-    uint32_t last_integration_time = initial_time;
-    simpson_store_t simps;
 
-    twi_enqueue(CONFIG, 7);
+    twi_enqueue(CONFIG, 14);
     while (!twi_isr.idle)
         ;
 
-    static uint8_t fifo_data_buffer[60];
+    static uint8_t fifo_data_buffer[30];
+    uint8_t mpu_addresses[2] = {0x69, 0x68};
 
     while (1)
     {
         uint32_t current_time = millis();
-        // clear_fifo();
+
         if (current_time - initial_time >= 250)
         {
-
-            int16_t fifo_count = calculate_fifo_bytes();
             initial_time = current_time;
 
-            if (fifo_count >= 1000)
+            for (uint8_t mpu_index = 0; mpu_index < 2; mpu_index++)
             {
-                clear_fifo();
-                continue;
-            }
+                uint8_t MPU_ADDRESS = mpu_addresses[mpu_index];
 
-            uint16_t samples = fifo_count / 12;
-            if (samples > 5)
-                samples = 5;
-            uint16_t bytes_to_read = samples * 12;
+                uint16_t fifo_count = calculate_fifo_bytes(MPU_ADDRESS);
 
-            if (samples > 0)
-            {
-                twi_message_t fifo_data_read[2] = {
-                    {
-                        .address = TWI_WRITE_ADDRESS(MPU_ADDRESS),
-                        .buffer = (uint8_t[]){0x74},
-                        .size = 1,
-                    },
-                    {
-                        .address = TWI_READ_ADDRESS(MPU_ADDRESS),
-                        .buffer = fifo_data_buffer,
-                        .size = bytes_to_read,
-                    }};
-
-                twi_enqueue(fifo_data_read, 2);
-                while (!twi_isr.idle)
-                    ;
-
-                for (size_t i = 0; i < samples; i++)
+                if (fifo_count >= 1024)
                 {
-                    uint8_t *sample = &fifo_data_buffer[i * 12];
-
-                    int16_t accel_x_raw = (sample[0] << 8) | sample[1]; // Bytes 0-1
-                    int16_t accel_y_raw = (sample[2] << 8) | sample[3]; // Bytes 2-3
-                    int16_t accel_z_raw = (sample[4] << 8) | sample[5]; // Bytes 4-5
-
-                    // int16_t gyro_x_raw = (sample[6] << 8) | sample[7];   // Bytes 6-7
-                    // int16_t gyro_y_raw = (sample[8] << 8) | sample[9];   // Bytes 8-9
-                    // int16_t gyro_z_raw = (sample[10] << 8) | sample[11]; // Bytes 10-11
-
-                    volatile float accel_x_g = accel_x_raw / ACCEL_CONSTANT;
-                    volatile float accel_y_g = accel_y_raw / ACCEL_CONSTANT;
-                    volatile float accel_z_g = accel_z_raw / ACCEL_CONSTANT;
-
-                    float accel[3] = {accel_x_g, accel_y_g, accel_z_g};
-                    // volatile float gyro_x_dps = gyro_x_raw / GYRO_CONSTANT;
-                    // volatile float gyro_y_dps = gyro_y_raw / GYRO_CONSTANT;
-                    // volatile float gyro_z_dps = gyro_z_raw / GYRO_CONSTANT;
-
-                    // SET BREAKPOINT HERE to verify the values
-                    volatile int YES = 1;
-                    // simpson_append(&simps, gyro_x_dps, gyro_y_dps, gyro_z_dps);
+                    clear_fifo(MPU_ADDRESS);
+                    fifo_count = 0;
+                    continue;
                 }
 
-                // if (simpson_size(&simps) >= 2)
-                // {
-                //     float dt_per_sample = (float)(current_time - last_integration_time) / 1000.0f;
-                //     if (samples > 0)
-                //         dt_per_sample /= (float)samples;
-                //     if (dt_per_sample <= 0.0f)
-                //         dt_per_sample = 0.01f;
+                uint16_t samples = fifo_count / 6;
 
-                //     float angle_x_deg = simpson_angle_x(&simps, dt_per_sample);
-                //     float angle_y_deg = simpson_angle_y(&simps, dt_per_sample);
-                //     float angle_z_deg = simpson_angle_z(&simps, dt_per_sample);
+                if (samples > 5)
+                    samples = 5;
 
-                //     last_integration_time = current_time;
-                // }
+                uint16_t bytes_to_read = samples * 6;
+
+                if (samples > 0)
+                {
+                    twi_message_t fifo_data_read[2] = {
+                        {
+                            .address = TWI_WRITE_ADDRESS(MPU_ADDRESS),
+                            .buffer = (uint8_t[]){0x74},
+                            .size = 1,
+                        },
+                        {
+                            .address = TWI_READ_ADDRESS(MPU_ADDRESS),
+                            .buffer = fifo_data_buffer,
+                            .size = bytes_to_read,
+                        }};
+
+                    twi_enqueue(fifo_data_read, 2);
+                    while (!twi_isr.idle)
+                        ;
+
+                    for (size_t i = 0; i < samples; i++)
+                    {
+                        uint8_t *sample = &fifo_data_buffer[i * 12];
+
+                        int16_t accel_x_raw = (sample[0] << 8) | sample[1];
+                        int16_t accel_y_raw = (sample[2] << 8) | sample[3];
+                        int16_t accel_z_raw = (sample[4] << 8) | sample[5];
+
+                        volatile float accel_x_g = accel_x_raw / ACCEL_CONSTANT;
+                        volatile float accel_y_g = accel_y_raw / ACCEL_CONSTANT;
+                        volatile float accel_z_g = accel_z_raw / ACCEL_CONSTANT;
+
+                        if (mpu_index == 0)
+                        {
+                            HIGH_ACCEL[0] = accel_x_g;
+                            HIGH_ACCEL[1] = accel_y_g;
+                            HIGH_ACCEL[2] = accel_z_g;
+                        }
+                        else
+                        {
+                            LOW_ACCEL[0] = accel_x_g;
+                            LOW_ACCEL[1] = accel_y_g;
+                            LOW_ACCEL[2] = accel_z_g;
+                        }
+                    }
+                }
             }
         }
     }
-
-    return 0;
 }

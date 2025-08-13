@@ -7,7 +7,6 @@ volatile uint16_t timer0_frac = 0;
 
 ISR(TIMER0_OVF_vect)
 {
-    // Each overflow is 1024 microseconds
     timer0_millis += 1;
     timer0_frac += 24; // Extra 24 microseconds
 
