@@ -2,79 +2,67 @@
 #include <avr/interrupt.h>
 #include <stdint.h>
 #include <stdbool.h>
-
 #include "twi.c"
 #include "../include/twi.h"
 #include "timer.c"
 #include "../include/config.h"
-
-#include "../include/simpson.h"
-#include "simpson.c"
-#include "cal.c"
-#include "../include/cal.h"
-
-void clear_fifo(uint8_t MPU_ADDRESS)
+#include "vector.c"
+#include <util/delay.h>
+void read_accel_registers(uint8_t MPU_ADDRESS, float *accel_result)
 {
-    twi_message_t CLEAR_FIFO[3] = {
-        {
-            .address = TWI_WRITE_ADDRESS(MPU_ADDRESS),
-            .buffer = (uint8_t[]){0x6A, 0b00000100},
-            .size = 2,
-        },
-        {
-            .address = TWI_WRITE_ADDRESS(MPU_ADDRESS),
-            .buffer = (uint8_t[]){0x6A, 0b01000000},
-            .size = 2,
-        },
-        {
-            .address = TWI_WRITE_ADDRESS(MPU_ADDRESS),
-            .buffer = (uint8_t[]){0x23, 0b01111000},
-            .size = 2,
-        },
-    };
+    static uint8_t accel_data[6];
 
-    twi_enqueue(CLEAR_FIFO, 3);
-    while (!twi_isr.idle)
-        ;
-}
-
-uint16_t calculate_fifo_bytes(uint8_t MPU_ADDRESS)
-{
-    static uint8_t fifo_count_buffer[2];
-    twi_message_t fifo_count_read[2] = {
+    twi_message_t accel_read[2] = {
         {
             .address = TWI_WRITE_ADDRESS(MPU_ADDRESS),
-            .buffer = (uint8_t[]){0x72},
+            .buffer = (uint8_t[]){0x3B}, // Start at ACCEL_XOUT_H register
             .size = 1,
         },
         {
             .address = TWI_READ_ADDRESS(MPU_ADDRESS),
-            .buffer = fifo_count_buffer,
-            .size = 2,
+            .buffer = accel_data,
+            .size = 6, // Read 6 bytes (X, Y, Z - 2 bytes each)
         }};
-    twi_enqueue(fifo_count_read, 2);
+
+    twi_enqueue(accel_read, 2);
     while (!twi_isr.idle)
         ;
 
-    uint16_t fifo_bytes = (fifo_count_buffer[0] << 8) | fifo_count_buffer[1];
-    return fifo_bytes;
+    // Combine high and low bytes for each axis
+    int16_t accel_x_raw = (accel_data[0] << 8) | accel_data[1];
+    int16_t accel_y_raw = (accel_data[2] << 8) | accel_data[3];
+    int16_t accel_z_raw = (accel_data[4] << 8) | accel_data[5];
+
+    // Convert to g-force
+    accel_result[0] = (float)accel_x_raw / ACCEL_CONSTANT;
+    accel_result[1] = (float)accel_y_raw / ACCEL_CONSTANT;
+    accel_result[2] = (float)accel_z_raw / ACCEL_CONSTANT;
 }
 
 int main(void)
 {
-    float HIGH_ACCEL[3];
-    float LOW_ACCEL[3];
+    float HIGH_ACCEL[3] = {0.0, 0.0, 0.0};
+    float LOW_ACCEL[3] = {0.0, 0.0, 0.0};
+    float dot_product = 0.0;
 
-    sei();
     twi_status_t status = twi_init(100000);
 
+    if (!twi_isr.idle)
+    {
+        while (1)
+            ;
+    }
+
     uint32_t initial_time = millis();
+
+    static uint32_t led_timer = 0;
+    static bool led_active = false;
+    static bool led_initialized = false;
 
     twi_enqueue(CONFIG, 14);
     while (!twi_isr.idle)
         ;
 
-    static uint8_t fifo_data_buffer[30];
     uint8_t mpu_addresses[2] = {0x69, 0x68};
 
     while (1)
@@ -85,70 +73,40 @@ int main(void)
         {
             initial_time = current_time;
 
-            for (uint8_t mpu_index = 0; mpu_index < 2; mpu_index++)
+            read_accel_registers(mpu_addresses[0], HIGH_ACCEL);
+
+            read_accel_registers(mpu_addresses[1], LOW_ACCEL);
+
+            vec3 high_vec = vec3_make(HIGH_ACCEL[0], HIGH_ACCEL[1], HIGH_ACCEL[2]);
+            vec3 low_vec = vec3_make(LOW_ACCEL[0], LOW_ACCEL[1], LOW_ACCEL[2]);
+            dot_product = vec_dot(high_vec, low_vec);
+
+            int break_flag = 0;
+
+            if (dot_product > 0.5)
             {
-                uint8_t MPU_ADDRESS = mpu_addresses[mpu_index];
-
-                uint16_t fifo_count = calculate_fifo_bytes(MPU_ADDRESS);
-
-                if (fifo_count >= 1024)
+                if (!led_initialized)
                 {
-                    clear_fifo(MPU_ADDRESS);
-                    fifo_count = 0;
-                    continue;
+                    DDRD |= (1 << PD4) | (1 << PD5);
+                    PORTD |= (1 << PD4);  // Set PD4 HIGH
+                    PORTD &= ~(1 << PD5); // Set PD5 LOW
+                    led_timer = millis();
+                    led_initialized = true;
+                    led_active = true;
                 }
 
-                uint16_t samples = fifo_count / 6;
-
-                if (samples > 5)
-                    samples = 5;
-
-                uint16_t bytes_to_read = samples * 6;
-
-                if (samples > 0)
+                if (led_active && (millis() - led_timer >= 500))
                 {
-                    twi_message_t fifo_data_read[2] = {
-                        {
-                            .address = TWI_WRITE_ADDRESS(MPU_ADDRESS),
-                            .buffer = (uint8_t[]){0x74},
-                            .size = 1,
-                        },
-                        {
-                            .address = TWI_READ_ADDRESS(MPU_ADDRESS),
-                            .buffer = fifo_data_buffer,
-                            .size = bytes_to_read,
-                        }};
-
-                    twi_enqueue(fifo_data_read, 2);
-                    while (!twi_isr.idle)
-                        ;
-
-                    for (size_t i = 0; i < samples; i++)
-                    {
-                        uint8_t *sample = &fifo_data_buffer[i * 12];
-
-                        int16_t accel_x_raw = (sample[0] << 8) | sample[1];
-                        int16_t accel_y_raw = (sample[2] << 8) | sample[3];
-                        int16_t accel_z_raw = (sample[4] << 8) | sample[5];
-
-                        volatile float accel_x_g = accel_x_raw / ACCEL_CONSTANT;
-                        volatile float accel_y_g = accel_y_raw / ACCEL_CONSTANT;
-                        volatile float accel_z_g = accel_z_raw / ACCEL_CONSTANT;
-
-                        if (mpu_index == 0)
-                        {
-                            HIGH_ACCEL[0] = accel_x_g;
-                            HIGH_ACCEL[1] = accel_y_g;
-                            HIGH_ACCEL[2] = accel_z_g;
-                        }
-                        else
-                        {
-                            LOW_ACCEL[0] = accel_x_g;
-                            LOW_ACCEL[1] = accel_y_g;
-                            LOW_ACCEL[2] = accel_z_g;
-                        }
-                    }
+                    PORTD ^= (1 << PD4) | (1 << PD5);
+                    led_timer = millis();
                 }
+            }
+            else
+            {
+
+                led_active = false;
+                led_initialized = false;
+                PORTD &= ~((1 << PD4) | (1 << PD5));
             }
         }
     }
