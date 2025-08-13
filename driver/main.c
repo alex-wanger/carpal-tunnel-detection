@@ -2,14 +2,15 @@
 #include <avr/interrupt.h>
 #include <stdint.h>
 
-#include "twi.c"                // 保留你原来的写法
+#include "twi.c" // 保留你原来的写法
 #include "../include/twi.h"
-#include "timer.c"              // 保留你原来的写法
+#include "timer.c" // 保留你原来的写法
 #include "../include/config.h"
 
 // ==== 新增，仅包含头文件（源文件由 Makefile 单独编译）====
-#include "../include/usart.h"
 #include "../include/simpson.h"
+#include "simpson.c"
+#include "cal.c"
 #include "../include/cal.h"
 // ==========================================================
 
@@ -89,17 +90,13 @@ int main(void)
     sei();
     twi_status_t status = twi_init(100000);
 
-    // ==== 新增：串口与 Simpson 存储 ====
-    usart_init(115200);
-    usart_print("USART Ready\r\n");
-
-    simpson_store_t acceleration;   // 存原始三轴角速度（dps）
-    simpson_store_t velocity;       // 存第一次积分的累计值（三轴）
+    simpson_store_t acceleration; // 存原始三轴角速度（dps）
+    simpson_store_t velocity;     // 存第一次积分的累计值（三轴）
     simpson_init(&acceleration);
     simpson_init(&velocity);
 
     uint32_t t0_accel = 0, t0_vel = 0;
-    uint8_t  accel_started = 0, vel_started = 0;
+    uint8_t accel_started = 0, vel_started = 0;
     // =====================================
 
     uint32_t initial_time = millis();
@@ -112,7 +109,6 @@ int main(void)
 
     while (1)
     {
-        clear_fifo();
         uint32_t current_time = millis();
 
         if (current_time - initial_time >= 250)
@@ -164,16 +160,13 @@ int main(void)
                     volatile float gyro_z_dps = gyro_z_raw / GYRO_CONSTANT;
 
                     // ====== 新增：串口打印 + 追加到 acceleration ======
-                    usart_print("[GYRO] X=");
-                    usart_print_float(gyro_x_dps, 2);
-                    usart_print(", Y=");
-                    usart_print_float(gyro_y_dps, 2);
-                    usart_print(", Z=");
-                    usart_print_float(gyro_z_dps, 2);
-                    usart_print("\r\n");
 
                     simpson_append(&acceleration, gyro_x_dps, gyro_y_dps, gyro_z_dps);
-                    if (!accel_started) { t0_accel = millis(); accel_started = 1; }
+                    if (!accel_started)
+                    {
+                        t0_accel = millis();
+                        accel_started = 1;
+                    }
                     // ==================================================
 
                     // 原来的断点保持
@@ -186,44 +179,33 @@ int main(void)
                 {
                     float total_s_acc = (millis() - t0_accel) / 1000.0f;
                     float dt_acc = total_s_acc / (float)(n_acc - 1);
-                    if (dt_acc <= 0.f) dt_acc = 0.01f;
+                    if (dt_acc <= 0.f)
+                        dt_acc = 0.01f;
 
                     float vx = simpson_angle_x(&acceleration, dt_acc);
                     float vy = simpson_angle_y(&acceleration, dt_acc);
                     float vz = simpson_angle_z(&acceleration, dt_acc);
 
                     simpson_append(&velocity, vx, vy, vz);
-                    if (!vel_started) { t0_vel = millis(); vel_started = 1; }
-
-                    usart_print("[1st Integration] X=");
-                    usart_print_float(vx, 2);
-                    usart_print(", Y=");
-                    usart_print_float(vy, 2);
-                    usart_print(", Z=");
-                    usart_print_float(vz, 2);
-                    usart_print("\r\n");
+                    if (!vel_started)
+                    {
+                        t0_vel = millis();
+                        vel_started = 1;
+                    }
 
                     uint16_t n_vel = simpson_size(&velocity);
                     if (n_vel >= 2)
                     {
                         float total_s_vel = (millis() - t0_vel) / 1000.0f;
                         float dt_vel = total_s_vel / (float)(n_vel - 1);
-                        if (dt_vel <= 0.f) dt_vel = 0.01f;
+                        if (dt_vel <= 0.f)
+                            dt_vel = 0.01f;
 
                         float ang_x = simpson_angle_x(&velocity, dt_vel);
                         float ang_y = simpson_angle_y(&velocity, dt_vel);
                         float ang_z = simpson_angle_z(&velocity, dt_vel);
-
-                        usart_print("[2nd Integration] X=");
-                        usart_print_float(ang_x, 2);
-                        usart_print(", Y=");
-                        usart_print_float(ang_y, 2);
-                        usart_print(", Z=");
-                        usart_print_float(ang_z, 2);
-                        usart_print("\r\n");
                     }
                 }
-                // =====================================================
             }
         }
     }

@@ -1,4 +1,4 @@
-#include "cal.h"
+#include "../include/cal.h"
 
 static float simpson_calc(float *arr, uint16_t n, float dt)
 {

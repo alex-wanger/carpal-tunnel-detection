@@ -1,4 +1,4 @@
-#include "simpson.h"
+#include "../include/simpson.h"
 #include <stdlib.h>
 
 static uint8_t grow_if_needed(simpson_store_t *s, uint16_t need_samples)
@@ -6,32 +6,39 @@ static uint8_t grow_if_needed(simpson_store_t *s, uint16_t need_samples)
     if (s->capacity >= need_samples)
         return 1;
 
-    const uint16_t GROW_STEP = 50; 
+    const uint16_t GROW_STEP = 50;
 
     uint16_t newcap = s->capacity ? s->capacity : (uint16_t)SIMPSON_START_CAP;
-    while (newcap < need_samples) {
+    while (newcap < need_samples)
+    {
         uint16_t prev = newcap;
         newcap = (uint16_t)(newcap + GROW_STEP);
-        if (newcap <= prev) {
+        if (newcap <= prev)
+        {
             newcap = need_samples;
             break;
         }
     }
 
-    float *nx = (float*)malloc((size_t)newcap * sizeof(float));
-    float *ny = (float*)malloc((size_t)newcap * sizeof(float));
-    float *nz = (float*)malloc((size_t)newcap * sizeof(float));
-    if (!nx || !ny || !nz) {
+    float *nx = (float *)malloc((size_t)newcap * sizeof(float));
+    float *ny = (float *)malloc((size_t)newcap * sizeof(float));
+    float *nz = (float *)malloc((size_t)newcap * sizeof(float));
+    if (!nx || !ny || !nz)
+    {
         free(nx);
         free(ny);
         free(nz);
         return 0;
     }
 
-    for (uint16_t i = 0; i < s->size; i++) {
-        if (s->x) nx[i] = s->x[i];
-        if (s->y) ny[i] = s->y[i];
-        if (s->z) nz[i] = s->z[i];
+    for (uint16_t i = 0; i < s->size; i++)
+    {
+        if (s->x)
+            nx[i] = s->x[i];
+        if (s->y)
+            ny[i] = s->y[i];
+        if (s->z)
+            nz[i] = s->z[i];
     }
 
     free(s->x);
