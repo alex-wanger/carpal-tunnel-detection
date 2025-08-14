@@ -3,7 +3,6 @@
 
 #include <avr/io.h>
 #include <stdbool.h>
-
 #ifndef BUZZER_DDR
 #define BUZZER_DDR   DDRB
 #endif
@@ -16,7 +15,6 @@
 #ifndef BUZZER_ACTIVE_HIGH
 #define BUZZER_ACTIVE_HIGH 1 
 #endif
-
 #ifndef BUZZ_THR_X_NEG
 #define BUZZ_THR_X_NEG  (-28.0f)
 #endif
@@ -39,9 +37,7 @@
 void buzzer_init(void);
 void buzzer_on(void);
 void buzzer_off(void);
-
 bool buzzer_should_beep(float x, float y, float z);
-
 void buzzer_update(float x, float y, float z);
 
 #endif
